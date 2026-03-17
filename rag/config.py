@@ -16,7 +16,7 @@ class PipelineSettings(BaseSettings):
     top_k: int = 5
     similarity_metric: str = "cosine"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 pipeline_settings = PipelineSettings()

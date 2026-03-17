@@ -73,6 +73,16 @@ async def synthesizer_node(state: WorkflowState) -> dict:
             "Please try again or contact your relationship manager for assistance."
         }
 
+    if not settings.gemini_api_key or settings.gemini_api_key == "your-gemini-api-key-here":
+        logger.info("synthesizer_mock_mode", reason="no gemini api key configured")
+        combined = "\n\n".join(output["result"] for output in state.agent_outputs)
+        response_text = (
+            f"[MOCK] Here is a summary of results for your query:\n\n{combined}"
+            "\n\nYou might also want to ask about:"
+            "\n- Account balance details\n- Recent transactions"
+        )
+        return {"final_response": response_text}
+
     structured_llm = _build_synthesizer_llm()
 
     agent_results_text = "\n\n".join(

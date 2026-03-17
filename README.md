@@ -121,7 +121,7 @@ Verify with:
 uv --version
 ```
 
-### Node.js 22+ and npm
+### Node.js 22+ and pnpm
 
 Required for the React frontend. Install via [nvm](https://github.com/nvm-sh/nvm):
 
@@ -138,7 +138,15 @@ nvm install 22
 
 # verify
 node --version
-npm --version
+```
+
+Install pnpm:
+
+```bash
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+
+# verify
+pnpm --version
 ```
 
 ### Docker and Docker Compose
@@ -154,9 +162,9 @@ docker --version
 docker compose version
 ```
 
-### Gemini API Key
+### Gemini API Key (optional)
 
-Obtain from [Google AI Studio](https://aistudio.google.com/apikey).
+Obtain from [Google AI Studio](https://aistudio.google.com/apikey). If no key is configured, the workflow runs in **mock mode** — the planner and synthesizer return canned responses so you can develop and test the full stack without an API key.
 
 ## Getting Started
 
@@ -173,7 +181,7 @@ uv sync
 cp .env.example .env
 ```
 
-Edit `.env` and set your `GEMINI_API_KEY`. Everything else has working defaults for local development.
+Edit `.env` and optionally set your `GEMINI_API_KEY`. Without it the chatbot runs in mock mode. Everything else has working defaults for local development.
 
 ### 3. Start infrastructure (Postgres + Redis)
 
@@ -185,7 +193,7 @@ docker compose up -d postgres redis
 
 ```bash
 cd apps/ui
-npm install
+pnpm install
 cd ../..
 ```
 
@@ -262,9 +270,11 @@ poe rag-ingestion
 This will:
 1. Extract text from all PDF (via PyMuPDF) and DOCX files
 2. Chunk the text (configurable `chunk_size` and `chunk_overlap`)
-3. Download the embedding model on first run (saved to `models/`)
+3. Download the embedding model on first run (saved to `models/`, no HuggingFace token required)
 4. Generate embeddings using `sentence-transformers/all-MiniLM-L6-v2`
 5. Store vectors in ChromaDB with cosine similarity search
+
+> PyTorch is configured to install from the CPU-only index via `pyproject.toml` (`[tool.uv.sources]`), avoiding the ~5GB CUDA download.
 
 The RAG MCP server (`poe rag-server`) then serves these chunks to the Client Services and Compliance & Tax agents at query time.
 
@@ -311,7 +321,7 @@ All request and response bodies are strictly validated with Pydantic models. The
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GEMINI_API_KEY` | Yes | — | Google Gemini API key |
+| `GEMINI_API_KEY` | No | — | Google Gemini API key (mock mode if unset) |
 | `GEMINI_MODEL` | No | `gemini-2.0-flash-lite` | Gemini model identifier |
 | `DATABASE_URL` | No | `postgresql+asyncpg://postgres:postgres@localhost:5432/chatbot` | Postgres connection string |
 | `REDIS_URL` | No | `redis://localhost:6379/0` | Redis connection string |
@@ -340,6 +350,6 @@ All request and response bodies are strictly validated with Pydantic models. The
 | Tool Integration | MCP (Streamable HTTP) |
 | Logging | structlog + OpenTelemetry trace context |
 | Auth | Mock LDAP + JWT |
-| Package Manager | uv |
+| Package Manager | uv (Python), pnpm (Node.js) |
 | Code Quality | ruff (format + lint) + ty (type check) via uvx |
 | Containerization | Docker + Docker Compose |

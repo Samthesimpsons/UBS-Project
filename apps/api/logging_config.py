@@ -52,18 +52,20 @@ def setup_logging() -> None:
         structlog.processors.UnicodeDecoder(),
         structlog.processors.JSONRenderer(),
     ]
-    structlog.configure(
-        processors=processors,
-        wrapper_class=structlog.stdlib.BoundLogger,
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
-        cache_logger_on_first_use=True,
-    )
+    log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
 
     logging.basicConfig(
         format="%(message)s",
         stream=sys.stdout,
-        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        level=log_level,
+    )
+
+    structlog.configure(
+        processors=processors,
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
     )
 
 

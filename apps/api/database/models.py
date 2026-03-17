@@ -49,7 +49,10 @@ class ChatSession(Base):
 
     user: Mapped["User"] = relationship(back_populates="sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(
-        back_populates="session", lazy="selectin", order_by="ChatMessage.created_at"
+        back_populates="session",
+        lazy="selectin",
+        order_by="ChatMessage.created_at",
+        cascade="all, delete-orphan",
     )
 
 

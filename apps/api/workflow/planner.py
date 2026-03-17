@@ -116,6 +116,15 @@ async def planner_node(state: WorkflowState) -> dict:
         f"\n\nProduce a plan to handle this query."
     )
 
+    if not settings.gemini_api_key or settings.gemini_api_key == "your-gemini-api-key-here":
+        logger.info("planner_mock_mode", reason="no gemini api key configured")
+        plan = PlannerOutput(
+            reasoning="[MOCK] Routing to client_services as demonstration.",
+            steps=[AgentStep(agent="client_services", task=state.user_message)],
+            requires_agent=True,
+        )
+        return {"plan": plan, "current_step_index": 0}
+
     try:
         plan = await structured_llm.ainvoke(
             [

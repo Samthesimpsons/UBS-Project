@@ -31,14 +31,25 @@ dependencies = [
     "structlog>=24.4.0",
     "poethepoet>=0.29.0",
     "ruff>=0.7.0",
+    "torch>=2.10.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
 
 [tool.poe.tasks.dev-api]
 cmd = "uv run uvicorn apps.api.main:app --reload --host 0.0.0.0 --port 8000"
 help = "Start the FastAPI backend with hot reload on port 8000"
 
 [tool.poe.tasks.dev-ui]
-shell = "cd apps/ui && npm run dev"
+shell = "cd apps/ui && pnpm run dev"
 help = "Start the React frontend dev server on port 5173"
 
 [tool.poe.tasks.check]

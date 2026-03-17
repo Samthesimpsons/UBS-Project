@@ -69,7 +69,7 @@ class McpClient:
                 response.raise_for_status()
                 result = response.json()
 
-                if "error" in result:
+                if result.get("error"):
                     logger.error(
                         "mcp_tool_error",
                         tool_name=tool_name,
