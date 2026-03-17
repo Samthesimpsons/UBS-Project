@@ -11,19 +11,19 @@ Client (React) ──> FastAPI ──> LangGraph Workflow
                      │      Planner    Synthesizer
                      │         │
                      │    ┌────┴────────────────────────────┐
-                     │    │         Executor (loop)          │
-                     │    │                                  │
+                     │    │         Executor (loop)         │
+                     │    │                                 │
                      │    │  ┌─────────────┐ ┌───────────┐  │
-                     │    │  │  Wealth     │ │  Private   │  │
-                     │    │  │  Advisory   │ │  Banking   │  │
+                     │    │  │  Wealth     │ │  Private  │  │
+                     │    │  │  Advisory   │ │  Banking  │  │
                      │    │  └──────┬──────┘ └─────┬─────┘  │
                      │    │  ┌──────┴──────┐ ┌─────┴─────┐  │
-                     │    │  │  Client     │ │  Lending   │  │
-                     │    │  │  Services   │ │  & Credit  │  │
+                     │    │  │  Client     │ │  Lending  │  │
+                     │    │  │  Services   │ │  & Credit │  │
                      │    │  └──────┬──────┘ └─────┬─────┘  │
                      │    │  ┌──────┴──────┐ ┌─────┴─────┐  │
-                     │    │  │ Compliance  │ │    FX &    │  │
-                     │    │  │   & Tax     │ │  Treasury  │  │
+                     │    │  │ Compliance  │ │    FX &   │  │
+                     │    │  │   & Tax     │ │  Treasury │  │
                      │    │  └─────────────┘ └───────────┘  │
                      │    └──────────────┬──────────────────┘
                      │                   │
@@ -447,6 +447,10 @@ Replace the `create_all` auto-DDL with **Alembic** migrations. The current appro
 
 Replace the mock LDAP stub with a real identity stack. Integrate with corporate **LDAP/Active Directory** for user authentication and add **Authelia** (or similar) as an SSO/MFA gateway in front of the application. Implement proper role-based access control (RBAC) so different user tiers (e.g., relationship managers vs. clients) see different capabilities.
 
+### Durable Workflow Execution
+
+For production workloads, consider migrating the LangGraph agentic workflow to **Temporal** for durable execution. The current in-process workflow has no fault tolerance — if the API server restarts mid-request, the workflow is lost. Temporal provides automatic retries, timeouts, and resumability at each step, which is critical for long-running multi-agent queries that may involve real banking operations. Each agent step (planner, executor dispatch, synthesizer) would become a Temporal activity with its own retry policy, and the overall plan-and-execute loop would be a Temporal workflow with full observability via the Temporal UI. This also enables workflow versioning for safe rollouts and replay-based debugging of production incidents.
+  
 ### Kubernetes Deployment
 
 Move from Docker Compose to **Kubernetes** for production orchestration. This includes Helm charts or Kustomize overlays for all services (API, UI, MCP servers, RAG server), horizontal pod autoscaling for the API and workflow workers, health/readiness probes, and a proper ingress controller (e.g., nginx-ingress or Traefik) with TLS termination.
