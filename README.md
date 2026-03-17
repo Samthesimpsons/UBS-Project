@@ -61,7 +61,7 @@ All LLM calls use **Gemini structured outputs** (Pydantic models enforced at the
 │   │   ├── auth/               LDAP authentication (mock) + JWT
 │   │   ├── chat/               Chat session CRUD + message handling
 │   │   ├── database/           SQLAlchemy async models (Postgres)
-│   │   ├── memory/             mem0 + Redis short-context memory
+│   │   ├── memory/             mem0 + Redis short-context memory (HuggingFace embeddings)
 │   │   ├── workflow/           LangGraph agentic workflow
 │   │   │   ├── agents/         6 specialist agents
 │   │   │   ├── tools/          MCP client + RAG retrieval tool
@@ -73,12 +73,14 @@ All LLM calls use **Gemini structured outputs** (Pydantic models enforced at the
 │   │   ├── logging_config.py   structlog + OpenTelemetry trace context
 │   │   └── main.py             App entrypoint + Scalar API docs
 │   └── ui/                     React + TypeScript frontend (Vite)
+│       ├── openapi.json         Committed OpenAPI schema (auto-generated)
 │       └── src/
-│           ├── api/             Typed API client
-│           ├── components/      Sidebar, ChatWindow, MessageBubble
-│           ├── hooks/           useAuth
-│           ├── pages/           LoginPage, ChatPage
-│           └── types/           TypeScript types matching Pydantic models
+│           ├── api/
+│           │   ├── generated/   Auto-generated TypeScript client (@hey-api/openapi-ts)
+│           │   └── client.ts    Client configuration (base URL, auth interceptor)
+│           ├── components/      Sidebar, ChatWindow, MessageBubble, ThinkingIndicator
+│           ├── hooks/           useAuth, useTheme, useMessageStream, useLlmMode
+│           └── pages/           LoginPage, ChatPage
 ├── rag/                        RAG pipeline + server
 │   ├── config.py               Pipeline settings
 │   ├── ingest.py               PDF/DOCX → ChromaDB (cosine similarity)
@@ -91,6 +93,9 @@ All LLM calls use **Gemini structured outputs** (Pydantic models enforced at the
 ├── docs/                       Source documents for RAG (place PDFs/DOCX here)
 ├── models/                     Auto-downloaded embedding models (gitignored)
 ├── tests/
+├── scripts/
+│   ├── export_openapi.py       Export OpenAPI JSON from FastAPI app
+│   └── check_openapi_drift.py  CI check: committed schema matches live app
 ├── pyproject.toml              Dependencies + poe tasks
 ├── uv.lock                     Locked dependencies
 ├── Dockerfile                  Multi-stage: backend + frontend
@@ -294,7 +299,8 @@ All tasks are run via [poethepoet](https://poethepoet.naber.dev/) (`uv run poe <
 |---|---|
 | `poe dev-api` | Start the FastAPI backend with hot reload on port 8000 |
 | `poe dev-ui` | Start the React frontend dev server on port 5173 |
-| `poe check` | Format, lint, and type-check all Python code |
+| `poe generate-api-client` | Export OpenAPI schema and regenerate TypeScript client |
+| `poe check` | Format, lint, type-check Python code, and check for OpenAPI drift |
 | `poe mock-mcp` | Start all 3 mock MCP servers (:9001, :9002, :9003) |
 | `poe rag-server` | Start the RAG MCP server that queries ChromaDB on port 9004 |
 | `poe rag-ingestion` | Ingest documents from docs/ into ChromaDB vector store |
@@ -313,9 +319,26 @@ All tasks are run via [poethepoet](https://poethepoet.naber.dev/) (`uv run poe <
 | `PATCH` | `/api/chat/sessions/{id}` | Rename or archive a session |
 | `DELETE` | `/api/chat/sessions/{id}` | Permanently delete a session |
 | `POST` | `/api/chat/sessions/{id}/messages` | Send a message, receive AI response |
-| `GET` | `/api/health` | Health check |
+| `POST` | `/api/chat/sessions/{id}/messages/stream` | Send a message, receive SSE stream with thinking steps |
+| `GET` | `/api/health` | Health check (includes `llm_mode: "mock" \| "live"`) |
 
 All request and response bodies are strictly validated with Pydantic models. The Scalar API reference is available at `/docs`.
+
+## API Client Generation
+
+The TypeScript frontend uses an auto-generated API client — no manual `fetch` calls or hand-written types. The pipeline:
+
+1. `scripts/export_openapi.py` extracts the OpenAPI schema from the FastAPI app into `apps/ui/openapi.json`
+2. `@hey-api/openapi-ts` generates a fully-typed TypeScript SDK in `apps/ui/src/api/generated/`
+3. Components import generated functions and types directly — full autocomplete and compile-time safety
+
+To regenerate after changing any API endpoint or Pydantic model:
+
+```bash
+poe generate-api-client
+```
+
+The `poe check` task includes an OpenAPI drift check that fails if the committed `openapi.json` doesn't match the current FastAPI schema, preventing stale clients from reaching production.
 
 ## Environment Variables
 
@@ -340,10 +363,10 @@ All request and response bodies are strictly validated with Pydantic models. The
 | LLM | Google Gemini (structured outputs) |
 | Orchestration | LangGraph (plan-and-execute) |
 | Backend | FastAPI, Pydantic, SQLAlchemy (async) |
-| Frontend | React 19, TypeScript, Vite |
+| Frontend | React 19, TypeScript, Vite, Radix UI, @hey-api/openapi-ts |
 | API Docs | Scalar |
 | Database | PostgreSQL 16 (sessions, messages as JSONB) |
-| Memory | mem0 + Redis |
+| Memory | mem0 + Redis (HuggingFace local embeddings) |
 | Vector Store | ChromaDB (cosine similarity) |
 | Embeddings | sentence-transformers (HuggingFace, local) |
 | Document Processing | PyMuPDF (PDF), python-docx (DOCX) |
@@ -353,3 +376,102 @@ All request and response bodies are strictly validated with Pydantic models. The
 | Package Manager | uv (Python), pnpm (Node.js) |
 | Code Quality | ruff (format + lint) + ty (type check) via uvx |
 | Containerization | Docker + Docker Compose |
+
+## Streaming & Thinking Steps
+
+The UI streams responses in real time via Server-Sent Events (SSE), showing intermediate thinking steps as the workflow progresses — similar to ChatGPT's reasoning display.
+
+When a message is sent, the frontend connects to `/api/chat/sessions/{id}/messages/stream` and receives events:
+
+1. **`planning`** — The planner's reasoning and the list of agents/tasks it has routed to
+2. **`agent_step`** — Each specialist agent's result as it completes (with a progress counter)
+3. **`synthesizing`** — Indicates the synthesizer is composing the final response
+4. **`done`** — The final persisted message, at which point the thinking indicator clears and the response renders
+
+The thinking panel is collapsible and shows checkmarks for completed steps, spinners for active steps, and intermediate result snippets.
+
+### Mock vs Live Mode
+
+The `/api/health` endpoint returns `llm_mode: "mock"` or `llm_mode: "live"`. When running in mock mode (no `GEMINI_API_KEY`), the UI displays a yellow **MOCK MODE** badge at the bottom of the chat window. In live mode, the planner and synthesizer use Gemini structured outputs for real routing and response generation.
+
+## Sample Queries
+
+Use these queries to exercise the different agents and workflow paths.
+
+### Single-Agent Queries
+
+| Query | Routes to | Expected response |
+|---|---|---|
+| "How is my portfolio performing?" | Wealth Advisory | Portfolio overview with AUM (CHF 12.4M), asset allocation breakdown, YTD performance (+6.8%) |
+| "What are my account balances?" | Private Banking | 4 accounts across CHF/EUR/USD/GBP with balances totaling CHF 7.49M |
+| "I need to schedule an appointment with my relationship manager" | Client Services | Service request with reference number (CS-XXXXXX), 2-3 business day timeline, required documents |
+| "What Lombard lending options do I have?" | Lending & Credit | Credit line at SARON + 0.85%, mortgage rates (fixed 5yr: 1.35%, 10yr: 1.45%), LTV details |
+| "Am I compliant with CRS and FATCA reporting?" | Compliance & Tax | Compliance status (fully compliant), KYC review dates, CRS deadline (30 June 2026) |
+| "What's the current EUR/CHF exchange rate?" | FX & Treasury | FX rates for 6 currency pairs with bid/ask spreads and daily changes |
+
+### Multi-Agent Queries
+
+These are the most interesting for testing the streaming thinking indicator, as you'll see multiple steps progress in sequence.
+
+| Query | Expected routing | Why |
+|---|---|---|
+| "I want to transfer EUR 500k to my CHF account — what rate can I get?" | FX & Treasury + Private Banking | FX rates then account details |
+| "Review my portfolio and check what lending options I have against it" | Wealth Advisory + Lending & Credit | Portfolio review then Lombard assessment |
+| "I'm relocating to Singapore — what are the tax implications and can you help with the paperwork?" | Compliance & Tax + Client Services | CRS/FATCA impact then onboarding docs (both use RAG) |
+| "What's my total net worth across all accounts and investments?" | Private Banking + Wealth Advisory | Account balances + portfolio AUM |
+
+### Direct Response (No Agent Routing)
+
+| Query | What happens |
+|---|---|
+| "Hello" | Planner sets `requires_agent: false`, returns a greeting directly — no executor or synthesizer steps |
+| "Thank you" | Direct response, no agents invoked |
+
+### What to Watch in the UI
+
+- **Planning phase**: The planner's reasoning text and the step list with agent names and tasks
+- **Execution phase**: Each step completes one at a time — checkmark appears, intermediate result snippet shows
+- **Synthesizing phase**: Spinner while the synthesizer combines all agent outputs into a polished response
+- **Final response**: Thinking indicator clears and the synthesized message renders
+- **Mock badge**: Yellow "MOCK MODE" pill confirms canned responses when no Gemini key is set
+
+## Future Work
+
+The current setup is optimized for quick local bootstrapping. The following items would be needed to turn this into a production-grade live application.
+
+### Database Migrations
+
+Replace the `create_all` auto-DDL with **Alembic** migrations. The current approach recreates tables on startup and tears down Postgres between runs, which is fine for local dev but loses data and prevents schema evolution. Alembic would provide versioned, reviewable migration files and safe rollback.
+
+### Authentication & Authorization
+
+Replace the mock LDAP stub with a real identity stack. Integrate with corporate **LDAP/Active Directory** for user authentication and add **Authelia** (or similar) as an SSO/MFA gateway in front of the application. Implement proper role-based access control (RBAC) so different user tiers (e.g., relationship managers vs. clients) see different capabilities.
+
+### Kubernetes Deployment
+
+Move from Docker Compose to **Kubernetes** for production orchestration. This includes Helm charts or Kustomize overlays for all services (API, UI, MCP servers, RAG server), horizontal pod autoscaling for the API and workflow workers, health/readiness probes, and a proper ingress controller (e.g., nginx-ingress or Traefik) with TLS termination.
+
+### Cloud Infrastructure (AWS + Terraform)
+
+Host the full stack on **AWS** with infrastructure managed by **Terraform**:
+
+- **EKS** for the Kubernetes cluster
+- **RDS (PostgreSQL)** for persistent sessions/messages with automated backups
+- **ElastiCache (Redis)** for mem0 short-term memory
+- **S3** for RAG document storage and ChromaDB persistence
+- **ALB** + **Route 53** for load balancing and DNS
+- **ECR** for container image registry
+- **Secrets Manager** for API keys and JWT secrets
+- **CloudWatch** / **OpenTelemetry Collector** for centralized logging and tracing
+
+### Observability
+
+Expand the existing structlog + OpenTelemetry setup into a full observability stack: ship traces to **Jaeger** or **Tempo**, metrics to **Prometheus** + **Grafana**, and structured logs to **Loki** or **CloudWatch Logs**. Add dashboards for LLM latency, token usage, agent success rates, and MCP server health.
+
+### Internal MCP Servers
+
+Replace the mock MCP servers with connections to real internal systems. The current mock servers (`banking_ops`, `knowledge`, `service_workflow`) return canned responses — in production these would point to actual internal APIs exposing real banking operations, client data, and workflow engines. This involves updating the `MCP_*_URL` environment variables to internal endpoints, handling mutual TLS or OAuth2 client credentials for service-to-service auth, and adapting the tool schemas if the real servers expose different capabilities than the mocks.
+
+### CI/CD Pipeline
+
+Set up **GitHub Actions** (or similar) with stages for lint/type-check (`poe check`), unit/integration tests, OpenAPI drift detection, container image build + push, and automated deployment to staging/production Kubernetes environments.

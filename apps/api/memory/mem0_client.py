@@ -11,8 +11,8 @@ logger = get_logger(__name__)
 class MemoryManager:
     """Manages short-term conversational memory using mem0 with Redis storage.
 
-    Provides methods to store and retrieve contextual memories per user,
-    enabling the chatbot to maintain relevant context across interactions.
+    Uses a local HuggingFace sentence-transformers model for embeddings,
+    avoiding any external API dependency for the memory subsystem.
     """
 
     def __init__(self) -> None:
@@ -26,7 +26,7 @@ class MemoryManager:
             The configured mem0 Memory instance.
         """
         if self._client is None:
-            config = {
+            config: dict = {
                 "vector_store": {
                     "provider": "redis",
                     "config": {
@@ -34,9 +34,30 @@ class MemoryManager:
                         "collection_name": "chatbot_memory",
                     },
                 },
+                "embedder": {
+                    "provider": "huggingface",
+                    "config": {
+                        "model": settings.embedding_model_name,
+                        "model_kwargs": {"device": "cpu"},
+                    },
+                },
             }
+
+            if settings.gemini_api_key and settings.gemini_api_key != "your-gemini-api-key-here":
+                config["llm"] = {
+                    "provider": "gemini",
+                    "config": {
+                        "api_key": settings.gemini_api_key,
+                        "model": settings.gemini_model,
+                    },
+                }
+
             self._client = Memory.from_config(config)
-            logger.info("mem0_client_initialized")
+            logger.info(
+                "mem0_client_initialized",
+                embedder="huggingface",
+                model=settings.embedding_model_name,
+            )
         return self._client
 
     async def store_memory(

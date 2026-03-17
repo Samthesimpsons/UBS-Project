@@ -73,7 +73,7 @@ async def synthesizer_node(state: WorkflowState) -> dict:
             "Please try again or contact your relationship manager for assistance."
         }
 
-    if not settings.gemini_api_key or settings.gemini_api_key == "your-gemini-api-key-here":
+    if settings.is_llm_mock_mode:
         logger.info("synthesizer_mock_mode", reason="no gemini api key configured")
         combined = "\n\n".join(output["result"] for output in state.agent_outputs)
         response_text = (

@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { Theme } from "@radix-ui/themes";
 import { App } from "./App";
 import "./index.css";
 
@@ -8,6 +9,8 @@ if (!rootElement) throw new Error("Root element not found");
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <Theme accentColor="green" radius="medium" scaling="100%">
+      <App />
+    </Theme>
   </React.StrictMode>
 );

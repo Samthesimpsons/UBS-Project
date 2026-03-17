@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { getProfile, login as apiLogin } from "@/api/client";
-import type { UserProfile } from "@/types/api";
+import "@/api/client";
+import {
+  loginApiAuthLoginPost,
+  getProfileApiAuthMeGet,
+} from "@/api/generated";
+import type { UserProfile } from "@/api/generated";
 
 interface AuthState {
   user: UserProfile | null;
@@ -23,8 +27,8 @@ export function useAuth(): AuthState {
       return;
     }
     try {
-      const profile = await getProfile();
-      setUser(profile);
+      const { data } = await getProfileApiAuthMeGet({ throwOnError: true });
+      setUser(data);
     } catch {
       localStorage.removeItem("access_token");
     } finally {
@@ -40,9 +44,12 @@ export function useAuth(): AuthState {
     setError(null);
     setIsLoading(true);
     try {
-      const response = await apiLogin({ username, password });
-      localStorage.setItem("access_token", response.access_token);
-      const profile = await getProfile();
+      const { data: tokenData } = await loginApiAuthLoginPost({
+        throwOnError: true,
+        body: { username, password },
+      });
+      localStorage.setItem("access_token", tokenData.access_token);
+      const { data: profile } = await getProfileApiAuthMeGet({ throwOnError: true });
       setUser(profile);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";

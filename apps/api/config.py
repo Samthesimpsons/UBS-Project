@@ -29,5 +29,10 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
+    @property
+    def is_llm_mock_mode(self) -> bool:
+        """Check if the LLM is running in mock mode (no valid API key)."""
+        return not self.gemini_api_key or self.gemini_api_key == "your-gemini-api-key-here"
+
 
 settings = Settings()

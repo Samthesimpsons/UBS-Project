@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from apps.api.auth.routes import router as auth_router
 from apps.api.chat.routes import router as chat_router
+from apps.api.config import settings
 from apps.api.database.connection import engine
 from apps.api.database.models import Base
 from apps.api.logging_config import get_logger, setup_logging
@@ -64,9 +65,12 @@ async def health_check() -> dict[str, str]:
     """Return the health status of the API service.
 
     Returns:
-        A dictionary indicating the service is operational.
+        A dictionary with status and LLM mode (mock or live).
     """
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "llm_mode": "mock" if settings.is_llm_mock_mode else "live",
+    }
 
 
 @app.get("/docs", include_in_schema=False)
